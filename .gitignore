@@ -1,4 +1,3 @@
-node_modules
 
 node_modules
 .env
@@ -11,6 +10,6 @@ typechain-types
 cache
 artifacts
 
-contracts/lock.sol
-scripts/deploy.ts 
-test/lock.ts
+contracts/Lock.sol/
+scripts/deploy.ts/
+test/Lock.ts/
