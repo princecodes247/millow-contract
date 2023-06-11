@@ -3,7 +3,11 @@
 pragma solidity ^0.8.0;
 
 interface IERC20 {
-    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
     function transferFrom(
         address sender,
         address recipient,
@@ -12,7 +16,6 @@ interface IERC20 {
 }
 
 contract Paytanium {
-
     address public owner;
 
     // state variable to check reentrancy guard
@@ -66,7 +69,6 @@ contract Paytanium {
         hbarToken = IERC20(_hbarToken);
     }
 
-    
     //modifier to make sure that a transfer is successful, before updating a vendor's balance
     modifier transferSuccessful(IERC20 token, uint256 amount) {
         require(!locked, "Reentrancy guard");
@@ -79,20 +81,24 @@ contract Paytanium {
         _;
     }
 
-    modifier greaterThanZero(uint256 amount){
+    modifier greaterThanZero(uint256 amount) {
         require(amount > 0, "Amount must be greater than zero");
         _;
     }
 
-    modifier onlyOwner(){
+    modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can perform this action");
         _;
     }
 
     // function that adds a vendor to the address book
-    function addVendorToAddressBook(address _address) onlyOwner public {
+    function addVendorToAddressBook(address _address) public onlyOwner {
         vendorERCAddressBook[_address] = vendorCount;
         emit VendorAdded(_address, vendorCount);
+
+        // Initialize token balances to zero for the newly added vendor
+        vendorBalances[_address] = TokenBalances(0, 0, 0, 0, 0, 0);
+
         vendorCount++;
     }
 
@@ -103,13 +109,14 @@ contract Paytanium {
     }
 
     // function to receive ether
-    receive() greaterThanZero(msg.value) external payable {
+    receive() external payable greaterThanZero(msg.value) {
         vendorBalances[msg.sender].etherBalance += msg.value;
         emit EtherReceived(msg.sender, msg.value);
     }
 
     // function to receive matic
-    function payWithMatic() greaterThanZero(msg.value) external payable {
+    // function to receive matic
+    function payWithMatic() external payable greaterThanZero(msg.value) {
         vendorBalances[msg.sender].maticBalance += msg.value;
         emit MaticReceived(msg.sender, msg.value);
     }
@@ -117,35 +124,56 @@ contract Paytanium {
     // function to receive USDT
     function payWithUSDT(
         uint256 amount
-    ) external payable transferSuccessful(usdtToken, amount) greaterThanZero(msg.value) {
-        vendorBalances[msg.sender].etherBalance += msg.value;
+    )
+        external
+        payable
+        transferSuccessful(usdtToken, amount)
+        greaterThanZero(msg.value)
+    {
+        vendorBalances[msg.sender].usdtBalance += amount;
         emit USDTReceived(msg.sender, amount);
     }
 
     // function to receive USDC
     function payWithUSDC(
         uint256 amount
-    ) external payable transferSuccessful(usdcToken, amount) greaterThanZero(msg.value) {
-        vendorBalances[msg.sender].etherBalance += msg.value;
+    )
+        external
+        payable
+        transferSuccessful(usdcToken, amount)
+        greaterThanZero(msg.value)
+    {
+        vendorBalances[msg.sender].usdcBalance += amount;
         emit USDCReceived(msg.sender, amount);
     }
 
     // function to receive dogecoin
     function payWithDOGE(
         uint256 amount
-    ) external payable transferSuccessful(dogeToken, amount) greaterThanZero(msg.value) {
-        vendorBalances[msg.sender].etherBalance += msg.value;
+    )
+        external
+        payable
+        transferSuccessful(dogeToken, amount)
+        greaterThanZero(msg.value)
+    {
+        vendorBalances[msg.sender].dogeBalance += amount;
         emit DogeReceived(msg.sender, amount);
     }
 
     // function to receive HBAR
     function payWithHBAR(
         uint256 amount
-    ) external payable transferSuccessful(hbarToken, amount) greaterThanZero(msg.value) {
-        vendorBalances[msg.sender].etherBalance += msg.value;
+    )
+        external
+        payable
+        transferSuccessful(hbarToken, amount)
+        greaterThanZero(msg.value)
+    {
+        vendorBalances[msg.sender].hbarBalance += amount;
         emit HBARReceived(msg.sender, amount);
     }
 
+    //allows the vendor to withdraw their ether balance
     function withdrawEther() external {
         uint256 balance = vendorBalances[msg.sender].etherBalance;
         require(balance > 0, "No Ether balance to withdraw");
@@ -154,6 +182,7 @@ contract Paytanium {
         payable(msg.sender).transfer(balance);
     }
 
+    //allows the vendor to withdraw their matic balance
     function withdrawMatic() external {
         uint256 balance = vendorBalances[msg.sender].maticBalance;
         require(balance > 0, "No Matic balance to withdraw");
@@ -162,36 +191,81 @@ contract Paytanium {
         payable(msg.sender).transfer(balance);
     }
 
+    //allows the vendor to withdraw their USDT
     function withdrawUSDT() external {
         uint256 balance = vendorBalances[msg.sender].usdtBalance;
         require(balance > 0, "No USDT balance to withdraw");
 
         vendorBalances[msg.sender].usdtBalance = 0;
-        require(usdtToken.transfer(msg.sender, balance), "USDT transfer failed");
+        require(
+            usdtToken.transfer(msg.sender, balance),
+            "USDT transfer failed"
+        );
     }
 
+    //allows the vendor to withdraw their USDC
     function withdrawUSDC() external {
         uint256 balance = vendorBalances[msg.sender].usdcBalance;
         require(balance > 0, "No USDC balance to withdraw");
 
         vendorBalances[msg.sender].usdcBalance = 0;
-        require(usdcToken.transfer(msg.sender, balance), "USDC transfer failed");
+        require(
+            usdcToken.transfer(msg.sender, balance),
+            "USDC transfer failed"
+        );
     }
 
+    //allows the vendor to withdraw their ether balance
     function withdrawDOGE() external {
         uint256 balance = vendorBalances[msg.sender].dogeBalance;
         require(balance > 0, "No DOGE balance to withdraw");
 
         vendorBalances[msg.sender].dogeBalance = 0;
-        require(dogeToken.transfer(msg.sender, balance), "DOGE transfer failed");
+        require(
+            dogeToken.transfer(msg.sender, balance),
+            "DOGE transfer failed"
+        );
     }
 
+    //allows the vendor to withdraw their HBAR
     function withdrawHBAR() external {
         uint256 balance = vendorBalances[msg.sender].hbarBalance;
         require(balance > 0, "No HBAR balance to withdraw");
 
         vendorBalances[msg.sender].hbarBalance = 0;
-        require(hbarToken.transfer(msg.sender, balance), "HBAR transfer failed");
+        require(
+            hbarToken.transfer(msg.sender, balance),
+            "HBAR transfer failed"
+        );
     }
 
+    // function to check vendor's ether balance
+    function checkEtherBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].etherBalance;
+    }
+
+    // function to check vendor's matic balance
+    function checkMaticBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].maticBalance;
+    }
+
+    // function to check vendor's USDT balance
+    function checkUSDTBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].usdtBalance;
+    }
+
+    // function to check vendor's USDC balance
+    function checkUSDCBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].usdcBalance;
+    }
+
+    // function to check vendor's DOGE balance
+    function checkDOGEBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].dogeBalance;
+    }
+
+    // function to check vendor's HBAR balance
+    function checkHBARBalance() external view returns (uint256) {
+        return vendorBalances[msg.sender].hbarBalance;
+    }
 }
