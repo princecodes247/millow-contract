@@ -120,7 +120,7 @@ contract Paytanium {
     // }
 
 //function to receive ether
-    function receiveEther(address vendorAddress) external payable greaterThanZero(msg.value){
+    function payWithEther(address vendorAddress) external payable greaterThanZero(msg.value){
         vendorBalances[vendorAddress].etherBalance += msg.value;
         emit EtherReceived(vendorAddress, msg.sender, msg.value);
     }
