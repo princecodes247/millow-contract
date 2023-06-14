@@ -1,0 +1,74 @@
+[
+    {
+        "name": "House NFT 1",
+        "category": "house",
+        "description": "A beautiful house in a serene neighborhood.",
+        "image": "https://example.com/house1.jpg"
+    },
+    {
+        "name": "House NFT 2",
+        "category": "house",
+        "description": "A cozy house with a spacious backyard.",
+        "image": "https://example.com/house2.jpg"
+    },
+    {
+        "name": "Yacht NFT 1",
+        "category": "yacht",
+        "description": "A luxurious yacht for unforgettable voyages.",
+        "image": "https://example.com/yacht1.jpg"
+    },
+    {
+        "name": "Yacht NFT 2",
+        "category": "yacht",
+        "description": "An elegant yacht for sailing enthusiasts.",
+        "image": "https://example.com/yacht2.jpg"
+    },
+    {
+        "name": "Nightclub NFT 1",
+        "category": "nightclub",
+        "description": "A vibrant nightclub for endless entertainment.",
+        "image": "https://example.com/nightclub1.jpg"
+    },
+    {
+        "name": "Nightclub NFT 2",
+        "category": "nightclub",
+        "description": "A trendy nightclub with a lively atmosphere.",
+        "image": "https://example.com/nightclub2.jpg"
+    },
+    {
+        "name": "Hospital NFT 1",
+        "category": "hospital",
+        "description": "A modern hospital equipped with advanced facilities.",
+        "image": "https://example.com/hospital1.jpg"
+    },
+    {
+        "name": "Hospital NFT 2",
+        "category": "hospital",
+        "description": "A state-of-the-art hospital providing top-notch medical care.",
+        "image": "https://example.com/hospital2.jpg"
+    },
+    {
+        "name": "School NFT 1",
+        "category": "school",
+        "description": "An exceptional school fostering a love for learning.",
+        "image": "https://example.com/school1.jpg"
+    },
+    {
+        "name": "School NFT 2",
+        "category": "school",
+        "description": "A renowned school empowering young minds.",
+        "image": "https://example.com/school2.jpg"
+    },
+    {
+        "name": "Stadium NFT 1",
+        "category": "stadium",
+        "description": "A magnificent stadium hosting thrilling sporting events.",
+        "image": "https://example.com/stadium1.jpg"
+    },
+    {
+        "name": "Stadium NFT 2",
+        "category": "stadium",
+        "description": "A grand stadium that echoes with cheers of fans.",
+        "image": "https://example.com/stadium2.jpg"
+    }
+]

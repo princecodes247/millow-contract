@@ -48,12 +48,36 @@ contract Paytanium {
 
     //events
     event VendorAdded(address _address, uint256);
-    event EtherReceived(address indexed vendor, address customer, uint256 amount);
-    event MaticReceived(address indexed vendor, address customer, uint256 amount);
-    event USDTReceived(address indexed vendor, address customer, uint256 amount);
-    event USDCReceived(address indexed vendor, address customer, uint256 amount);
-    event DogeReceived(address indexed vendor, address customer, uint256 amount);
-    event HBARReceived(address indexed vendor, address customer, uint256 amount);
+    event EtherReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
+    event MaticReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
+    event USDTReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
+    event USDCReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
+    event DogeReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
+    event HBARReceived(
+        address indexed vendor,
+        address customer,
+        uint256 amount
+    );
 
     constructor(
         address _dogeToken,
@@ -62,7 +86,7 @@ contract Paytanium {
         address _hbarToken
     ) {
         owner = msg.sender;
-        vendorCount = 0;
+        vendorCount = 1;
         dogeToken = IERC20(_dogeToken);
         usdtToken = IERC20(_usdtToken);
         usdcToken = IERC20(_usdcToken);
@@ -91,13 +115,25 @@ contract Paytanium {
         _;
     }
 
-    modifier onlyVendor() {
-    require(vendorERCAddressBook[msg.sender] != 0, "Only vendors can perform this action");
-    _;
-}
+    modifier onlyVendor(address _vendor) {
+        require(
+            vendorERCAddressBook[_vendor] > 0,
+            "Only vendors can perform this action"
+        );
+        require(
+            _vendor == msg.sender,
+            "vendor withdrawing funds must be owner"
+        );
+        _;
+    }
+
+    // modifier nonReentrant() {
+    //     require(false); // This will prevent recursive calls
+    //     _;
+    // }
 
     // function that adds a vendor to the address book
-    function addVendorToAddressBook(address _address) public onlyOwner {
+    function addVendorToAddressBook(address _address) public onlyOwner() {
         vendorERCAddressBook[_address] = vendorCount;
         emit VendorAdded(_address, vendorCount);
 
@@ -119,15 +155,19 @@ contract Paytanium {
     //     emit EtherReceived(msg.sender, msg.value);
     // }
 
-//function to receive ether
-    function payWithEther(address vendorAddress) external payable greaterThanZero(msg.value){
+    //function to receive ether
+    function payWithEther(
+        address vendorAddress
+    ) external payable greaterThanZero(msg.value) {
         vendorBalances[vendorAddress].etherBalance += msg.value;
         emit EtherReceived(vendorAddress, msg.sender, msg.value);
     }
 
     // function to receive matic
     // function to receive matic
-    function payWithMatic(address vendorAddress) external payable greaterThanZero(msg.value) {
+    function payWithMatic(
+        address vendorAddress
+    ) external payable greaterThanZero(msg.value) {
         vendorBalances[vendorAddress].maticBalance += msg.value;
         emit MaticReceived(vendorAddress, msg.sender, msg.value);
     }
@@ -180,70 +220,61 @@ contract Paytanium {
         transferSuccessful(hbarToken, msg.value)
         greaterThanZero(msg.value)
     {
-        vendorBalances[msg.sender].hbarBalance += msg.value;
+        vendorBalances[vendorAddress].hbarBalance += msg.value;
         emit HBARReceived(vendorAddress, msg.sender, msg.value);
     }
 
     //allows the vendor to withdraw their ether balance
-    function withdrawEther() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].etherBalance;
+    function withdrawEther(address _vendor) external onlyVendor(_vendor) {
+        uint256 balance = vendorBalances[_vendor].etherBalance;
         require(balance > 0, "No Ether balance to withdraw");
 
-        vendorBalances[msg.sender].etherBalance = 0;
-        payable(msg.sender).transfer(balance);
+        vendorBalances[_vendor].etherBalance = 0;
+        payable(_vendor).transfer(balance);
     }
 
     //allows the vendor to withdraw their matic balance
-    function withdrawMatic() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].maticBalance;
+    function withdrawMatic(address _vendor) external onlyVendor(_vendor) {
+        uint256 balance = vendorBalances[_vendor].maticBalance;
         require(balance > 0, "No Matic balance to withdraw");
 
-        vendorBalances[msg.sender].maticBalance = 0;
-        payable(msg.sender).transfer(balance);
+        vendorBalances[_vendor].maticBalance = 0;
+        payable(_vendor).transfer(balance);
     }
 
     //allows the vendor to withdraw their USDT
-    function withdrawUSDT() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].usdtBalance;
+    function withdrawUSDT(address _vendor) external onlyVendor(_vendor) {
+        uint256 balance = vendorBalances[_vendor].usdtBalance;
         require(balance > 0, "No USDT balance to withdraw");
 
-        vendorBalances[msg.sender].usdtBalance = 0;
-        require(
-            usdtToken.transfer(msg.sender, balance),
-            "USDT transfer failed"
-        );
+        vendorBalances[_vendor].usdtBalance = 0;
+        require(usdtToken.transfer(_vendor, balance), "USDT transfer failed");
     }
 
     //allows the vendor to withdraw their USDC
-    function withdrawUSDC() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].usdcBalance;
+    function withdrawUSDC(address _vendor) external onlyVendor(_vendor){
+        uint256 balance = vendorBalances[_vendor].usdcBalance;
         require(balance > 0, "No USDC balance to withdraw");
 
-        vendorBalances[msg.sender].usdcBalance = 0;
-        require(
-            usdcToken.transfer(msg.sender, balance),
-            "USDC transfer failed"
-        );
+        vendorBalances[_vendor].usdcBalance = 0;
+        require(usdcToken.transfer(_vendor, balance), "USDC transfer failed");
     }
 
     //allows the vendor to withdraw their ether balance
-    function withdrawDOGE() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].dogeBalance;
+    function withdrawDOGE(address _vendor) external onlyVendor(_vendor) {
+        uint256 balance = vendorBalances[_vendor].dogeBalance;
         require(balance > 0, "No DOGE balance to withdraw");
 
-        vendorBalances[msg.sender].dogeBalance = 0;
-        require(
-            dogeToken.transfer(msg.sender, balance),
-            "DOGE transfer failed"
-        );
+        vendorBalances[_vendor].dogeBalance = 0;
+        require(dogeToken.transfer(_vendor, balance), "DOGE transfer failed");
     }
 
     //allows the vendor to withdraw their HBAR
-    function withdrawHBAR() onlyVendor() external {
-        uint256 balance = vendorBalances[msg.sender].hbarBalance;
+    function withdrawHBAR(address _vendor) external onlyVendor(_vendor) {
+        uint256 balance = vendorBalances[_vendor].hbarBalance;
         require(balance > 0, "No HBAR balance to withdraw");
 
-        vendorBalances[msg.sender].hbarBalance = 0;
+        vendorBalances[_vendor].hbarBalance = 0;
         require(
             hbarToken.transfer(msg.sender, balance),
             "HBAR transfer failed"
@@ -251,32 +282,36 @@ contract Paytanium {
     }
 
     // function to check vendor's ether balance
-    function checkEtherBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].etherBalance;
+    function checkEtherBalance(
+        address _vendor
+    ) external view returns (uint256) {
+        return vendorBalances[_vendor].etherBalance;
     }
 
     // function to check vendor's matic balance
-    function checkMaticBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].maticBalance;
+    function checkMaticBalance(
+        address _vendor
+    ) external view returns (uint256) {
+        return vendorBalances[_vendor].maticBalance;
     }
 
     // function to check vendor's USDT balance
-    function checkUSDTBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].usdtBalance;
+    function checkUSDTBalance(address _vendor) external view returns (uint256) {
+        return vendorBalances[_vendor].usdtBalance;
     }
 
     // function to check vendor's USDC balance
-    function checkUSDCBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].usdcBalance;
+    function checkUSDCBalance(address _vendor) external view returns (uint256) {
+        return vendorBalances[_vendor].usdcBalance;
     }
 
     // function to check vendor's DOGE balance
-    function checkDOGEBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].dogeBalance;
+    function checkDOGEBalance(address _vendor) external view returns (uint256) {
+        return vendorBalances[_vendor].dogeBalance;
     }
 
     // function to check vendor's HBAR balance
-    function checkHBARBalance() external view returns (uint256) {
-        return vendorBalances[msg.sender].hbarBalance;
+    function checkHBARBalance(address _vendor) external view returns (uint256) {
+        return vendorBalances[_vendor].hbarBalance;
     }
 }

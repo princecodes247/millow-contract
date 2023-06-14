@@ -1,142 +1,75 @@
-# Paytanium Smart Contract
-Paytanium is a smart contract to be deployed on the Hedera network, using the Solidity programming language. It will be the smart contract that powers a payment gatweway that allows vendors to receive several ERC20 tokens as payment from customers. Vendors can withdraw their balances at any time.
+# Billow Smart Contract
 
-## Getting Started
-These instructions will help you get a copy of the Paytanium smart contract up and running on your local machine for development and testing purposes.
+This is the smart contract for the Billow real estate platform, developed for the Hedera Hackathon by the Hedera Foundation. 
+Billow allows users to mint and trade Real Estate In form of NFTs (Non-Fungible Tokens) on the Hedera network. The smart contract is built on the Ethereum Virtual Machine (EVM) using Solidity programming language and conforms to the ERC721 standard.
 
-### Prerequisites
-To interact with the Paytanium smart contract, you will need the following:
+## Features
 
-Node.js (>=12.0.0)
-npm or Yarn
-Hardhat (>=2.6.0)
-Installation
-Follow these steps to install the required dependencies and set up the project:
+The Billow smart contract includes the following features:
 
-Clone the repository to your local machine:
-```shell
-git clone <repository-url>
-```
-Change to the project directory:
+- Minting and listing of NFTs
+- Buying and selling NFTs
+- Setting and updating listing prices
+- Removing NFT listings
+- Retrieving NFT listing details
+- Fetching the total number of listed tokens
+- Retrieving the URI of a token
 
-```shell
-cd <project-directory>
-```
+## Installation and Deployment
 
-Install the necessary dependencies:
+To deploy the Billow smart contract on the Hedera network, follow these steps:
 
-```shell
-npm install
-# or
-yarn install
-```
+1. Set up an Ethereum development environment and install the necessary dependencies.
 
-### Configuration
-Before you can deploy and test the Paytanium smart contract, you may need to configure some settings. The configuration file is located at hardhat.config.js. Review the file and update the network settings according to your needs.
+2. Import the OpenZeppelin ERC721 library by running the following command:
 
-By default, the contract will be deployed on the Hedera network. You can modify the networks section in the configuration file to specify different networks or use local test networks.
+   ```
+   npm install @openzeppelin/contracts
+   ```
 
-Deploying the Smart Contract
-To deploy the Paytanium smart contract, run the following command:
+3. Compile the smart contract using Solidity compiler.
 
-```shell
-npx hardhat run scripts/deploy.js --network <network-name>
-```
+4. Deploy the compiled smart contract to the Hedera network using your preferred deployment tool or framework.
 
-Replace <network-name> with the desired network where you want to deploy the contract. This command will compile the contract, deploy it to the specified network, and provide you with the contract's address upon successful deployment.
 
-### Running Tests
-Paytanium includes a set of tests to ensure its functionality. To run the tests, execute the following command:
+## Usage
 
-```shell
+### Minting and Listing NFTs
 
-npx hardhat test
-``` 
+The `mintAndList` function allows users to mint a new NFT Property and list it for sale. Users need to provide the file URL associated with the NFT and the listing price. Only non-empty file URLs and positive prices are accepted.
 
-This command will compile the contracts, deploy them to a local test network, and run the test suite. It will output the test results, including any passing or failing tests.
+### Buying and Selling NFTs
 
-## Contract Details
-The Paytanium smart contract consists of the following features:
+Users can purchase Property NFTs that are listed for sale using the `buyNFT` function. The function requires the `tokenId` of the NFT to be purchased and the correct amount of Ether sent to cover the listing price. The NFT ownership is transferred to the buyer, and the listing is removed after the purchase.
 
-### Supported Tokens
-- Dogecoin (DOGE)
-- USD Tether (USDT)
-- USD Coin (USDC)
-- Hedera Hashgraph (HBAR)
-- Ethereum (ETH)
+### Setting and Updating Listing Prices
 
-### Vendor Management
-The contract allows vendors to register and manage their balances for different tokens. Vendors can be added to the contract's address book, and each vendor is assigned a unique ID.
+The owner of an NFT Property can set or update the listing price using the `setNFTPrice` function. The function requires the `tokenId`, the index of the listing to be updated, and the new price. Only the owner of the NFT can update the price.
 
-### Contract Variables
-- `owner`: The address of the contract owner
-- `locked`: A boolean variable used as a reentrancy guard
-dogeToken, usdtToken, usdcToken, hbarToken: Instances of the IERC20 interface representing different tokens
-- `vendorCount`: A counter to keep track of the number of vendors
-- `vendorERCAddressBook`: A mapping that associates each vendor address with a unique vendor ID
-- `vendorBalances`: A mapping that stores the token balances for each vendor
+### Removing NFT Listings
 
-### Events
-Events are basically signboards that popup when a function has been run successfully, telling everyone what just happened
-- `VendorAdded(address _address, uint256)`: Emitted when a new vendor is added to the address book
-- `EtherReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives Ether payment
-- `MaticReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives Matic payment
-- `USDTReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives USDT payment
-- `USDCReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives USDC payment
-- `DogeReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives DOGE payment
-- `HBARReceived(address indexed vendor, uint256 amount)`: Emitted when a vendor receives HBAR payment
+The owner of an NFT can remove a specific listing using the `removeNFTListing` function. The function requires the `tokenId` and the index of the listing to be removed. Only the owner of the NFT can remove the listing.
 
-### Modifiers
-Modifiers are validity checkers that make sure some conditions are met, else they revert
-- `transferSuccessful(IERC20 token, uint256 amount)`: A modifier to ensure a successful token transfer before updating a vendor's balance
-- `greaterThanZero(uint256 amount)`: A modifier to validate that an amount is greater than zero
-- `onlyOwner()`: A modifier to restrict certain actions to the contract owner only
+### Retrieving Property Listing Details
 
-### Constructor
-- `constructor(address _dogeToken, address _usdtToken, address _usdcToken, address _hbarToken)`: Initializes the contract by setting the owner address, vendor count to zero, and assigning instances of the token contracts.
+The `getNFTListing` function allows users to retrieve the listing details of an NFT. Users need to provide the `tokenId` of the NFT, and the function returns the owner, price, and file URL associated with the listing.
 
-### Vendor Management Functions
-- `addVendorToAddressBook(address _address)`: Adds a vendor to the address book, assigns a unique vendor ID, and initializes token balances to zero.
-- `fetchVendorId(address _address)`: Retrieves the vendor's ID based on their address.
+### Fetching the Total Number of Listed Property
 
-### Token Receival From Customers
-Vendors can receive tokens from customers by calling the respective functions for each token:
+The `getTotalNumberOfListedTokens` function returns the total number of tokens that are currently listed for sale. This can be useful for implementing a marketplace that displays all the listed tokens.
 
-- `receive() external payable`: Receives Ether payments and updates the vendor's Ether balance.
-- `payWithMatic() external payable`: Receives Matic payments and updates the vendor's Matic balance.
-- `payWithUSDT(uint256 amount) external payable`: Receives USDT payments and updates the vendor's USDT balance.
-- `payWithUSDC(uint256 amount) external payable`: Receives USDC payments and updates the vendor's USDC balance.
-- `payWithDOGE(uint256 amount) external payable`: Receives DOGE payments and updates the vendor's DOGE balance.
-- `payWithHBAR(uint256 amount) external payable`: Receives HBAR payments and updates the vendor's HBAR balance.
+### Retrieving the URI of a Token
 
-### Withdrawal Functions For Vendors
-Vendors can withdraw whenever they want
-- `withdrawEther() external`: Allows the vendor to withdraw their Ether balance.
-- `withdrawMatic() external`: Allows the vendor to withdraw their Matic balance.
-- `withdrawUSDT() external`: Allows the vendor to withdraw their USDT balance.
-- `withdrawUSDC() external`: Allows the vendor to withdraw their USDC balance.
-- `withdrawDOGE() external`: Allows the vendor to withdraw their DOGE balance.
-- `withdrawHBAR() external`: Allows the vendor to withdraw their HBAR balance.
+The `getTokenURI` function retrieves the URI associated with a token. Users need to provide the `tokenId`, and the function returns the metadata URI associated with the token.
 
-### Balance Tracking
-The contract tracks the balances of vendors for each supported token. Vendors can retrieve their balances by calling the respective balance functions:
+## Deployment
 
-- `checkEtherBalance() external view returns (uint256)`: Retrieves the vendor's Ether balance.
-- `checkMaticBalance() external view returns (uint256)`: Retrieves the vendor's Matic balance.
-- `checkUSDTBalance() external view returns (uint256)`: Retrieves the vendor's USDT balance.
-- `checkUSDCBalance() external view returns (uint256)`: Retrieves the vendor's USDC balance.
-- `checkDOGEBalance() external view returns (uint256)`: Retrieves the vendor's DOGE balance.
-- `checkHBARBalance() external view returns (uint256)`: Retrieves the vendor's HBAR balance.
+The Billow smart contract can be deployed on the Hedera network using tools such as Remix, Truffle, or Hardhat. Follow the deployment instructions provided by the chosen tool to deploy the contract on the Hedera network.
 
-### Contributing
-Contributions to the Paytanium project are welcome and encouraged. If you have any suggestions, bug reports, or feature requests, please open an issue on the project's GitHub repository, or send an email to bashorun115@gmail.com.
+## License
 
-Before making any contributions, please read the contributing guidelines for more information.
+This smart contract is released under the MIT License. Please refer to the [LICENSE](LICENSE) file for more information.
 
-### License
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-#### Acknowledgments
-The Paytanium smart contract was developed using the Hardhat framework.
-The Solidity programming language was used to write the smart contract.
-This project was inspired by the need to provide vendors with a simple and secure way to manage multiple token balances, on top of the Hedera network.
+## Contact and Sidenotes
+Please contact me at bashorun115@gmail.com for clarification
+I have left the tests and smart contract for Paytanium intact, just in case.
