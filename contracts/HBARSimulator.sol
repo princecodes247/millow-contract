@@ -1,49 +1,83 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.0;
 
-interface HBARToken {
-    function balanceOf(address account) external view returns (uint256);
-    function transfer(address recipient, uint256 amount) external returns (bool);
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
-}
-
-contract HBARTokenSimulator {
+contract HBARSimulator {
     string public constant name = "Hedera Hashgraph Token";
+    uint8 public constant decimals = 18;
     string public constant symbol = "HBAR";
-    uint8 public constant decimals = 8;
-    address public constant hbarContractAddress = 0xa43C7F27E36279645Bd1620070414e564ec291a9;
+    uint256 public constant INITIAL_SUPPLY = 6000000000 * 10**18;
 
-    HBARToken private hbarToken;
+    mapping(address => uint256) private balances;
+    mapping(address => mapping(address => uint256)) private allowances;
+    uint256 private _totalSupply;
 
-    constructor(address customer, uint256 amount) {
-        hbarToken = HBARToken(hbarContractAddress);
-        allocateTokens(customer, amount);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    constructor(address buyer) {
+        _totalSupply = INITIAL_SUPPLY;
+        balances[buyer] = _totalSupply;
     }
 
     function balanceOf(address account) external view returns (uint256) {
-        return hbarToken.balanceOf(account);
+        return balances[account];
     }
 
-    function transfer(address recipient, uint256 amount) external returns (bool) {
-        return hbarToken.transfer(recipient, amount);
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply;
     }
 
-    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool) {
-        return hbarToken.transferFrom(sender, recipient, amount);
+    function transfer(address to, uint256 value) external returns (bool) {
+        require(to != address(0), "Invalid recipient");
+        require(value <= balances[msg.sender], "Insufficient balance");
+
+        balances[msg.sender] -= value;
+        balances[to] += value;
+
+        emit Transfer(msg.sender, to, value);
+        return true;
     }
 
-    function approve(address spender, uint256 amount) external returns (bool) {
-        return hbarToken.approve(spender, amount);
+    function transferFrom(address from, address to, uint256 value) external returns (bool) {
+        require(to != address(0), "Invalid recipient");
+        require(value <= balances[from], "Insufficient balance");
+        require(value <= allowances[from][msg.sender], "Insufficient allowance");
+
+        balances[from] -= value;
+        balances[to] += value;
+        allowances[from][msg.sender] -= value;
+
+        emit Transfer(from, to, value);
+        return true;
+    }
+
+    function approve(address spender, uint256 value) external returns (bool) {
+        allowances[msg.sender][spender] = value;
+
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+
+    function increaseApproval(address spender, uint256 addedValue) external returns (bool) {
+        allowances[msg.sender][spender] += addedValue;
+
+        emit Approval(msg.sender, spender, allowances[msg.sender][spender]);
+        return true;
+    }
+
+    function decreaseApproval(address spender, uint256 subtractedValue) external returns (bool) {
+        uint256 currentAllowance = allowances[msg.sender][spender];
+        if (subtractedValue >= currentAllowance) {
+            allowances[msg.sender][spender] = 0;
+        } else {
+            allowances[msg.sender][spender] = currentAllowance - subtractedValue;
+        }
+
+        emit Approval(msg.sender, spender, allowances[msg.sender][spender]);
+        return true;
     }
 
     function allowance(address owner, address spender) external view returns (uint256) {
-        return hbarToken.allowance(owner, spender);
-    }
-  
-    function allocateTokens(address recipient, uint256 amount) internal {
-        hbarToken.transfer(recipient, amount);
+        return allowances[owner][spender];
     }
 }
