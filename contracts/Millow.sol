@@ -1,9 +1,16 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: GPL-3.0
+// pragma solidity ^0.8.0;
+pragma solidity >=0.7.0 <0.9.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+
+// Compile with remix for remote imports to work - otherwise keep precompiles locally
+// import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/hts-precompile/HederaTokenService.sol";
+import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/contracts/hts-precompile/HederaTokenService.sol";
+// import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/hts-precompile/HederaResponseCodes.sol";
+import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/contracts/hts-precompile/HederaResponseCodes.sol";
 
 contract Millow is ERC721, Ownable {
     struct NFTListing {
@@ -44,10 +51,10 @@ contract Millow is ERC721, Ownable {
         _tokenIdCounter = 0;
     }
 
-    function setTokenURI(
-        uint256 tokenId,
-        string memory _tokenURI
-    ) internal virtual {
+    function setTokenURI(uint256 tokenId, string memory _tokenURI)
+        internal
+        virtual
+    {
         require(
             _exists(tokenId),
             "ERC721Metadata: URI set of nonexistent token"
@@ -72,17 +79,19 @@ contract Millow is ERC721, Ownable {
             NFTListing({owner: seller, price: price, fileUrl: fileUrl})
         );
 
-        emit NFTMinted(tokenId, seller, fileUrl, price);
         _tokenIdCounter++;
+        emit NFTMinted(tokenId, seller, fileUrl, price);
         return tokenId;
     }
 
-    function getNFTListing(
-        uint256 tokenId
-    )
+    function getNFTListing(uint256 tokenId)
         public
         view
-        returns (address owner, uint256 price, string memory fileUrl)
+        returns (
+            address owner,
+            uint256 price,
+            string memory fileUrl
+        )
     {
         require(_exists(tokenId), "Token does not exist");
         require(_nftListings[tokenId].length > 0, "Invalid listing index");
@@ -104,6 +113,7 @@ contract Millow is ERC721, Ownable {
 
         // Get the first listing for the token
         NFTListing storage listing = _nftListings[tokenId][0];
+        require(amount >= listing.price, "Insufficient payment");
 
         // Check if the NFT is listed for sale
         require(listing.price > 0, "NFT is not listed for sale");
@@ -120,8 +130,14 @@ contract Millow is ERC721, Ownable {
         // Calculate the remaining payment after deducting the commission
         uint256 remainingPayment = listing.price - commission;
 
+        //takes HBAR from buyer
+        receiveHbar(payable(_buyer), amount);
+
         // Transfer the remaining payment to the seller
-        seller.transfer(remainingPayment);
+        // seller.transfer(remainingPayment);
+
+        //using HBAR now - transferring remaining payment to the seller
+        transferHbar(seller, remainingPayment);
 
         // Add the commission to the commission balances
         _commissionBalances[owner()] += commission;
@@ -148,11 +164,16 @@ contract Millow is ERC721, Ownable {
         uint256 index,
         uint256 newPrice
     ) public {
+        NFTListing storage listing = _nftListings[tokenId][0];
         require(_exists(tokenId), "Token does not exist");
         require(_nftListings[tokenId].length > index, "Invalid listing index");
         require(
             _nftListings[tokenId][index].owner == msg.sender,
             "You are not the owner of the NFT"
+        );
+        require(
+            newPrice >= listing.price,
+            "New price must be greater than or equal to current price"
         );
         require(newPrice > 0, "Invalid price");
 
@@ -166,6 +187,10 @@ contract Millow is ERC721, Ownable {
         require(
             _nftListings[tokenId][0].owner == msg.sender,
             "You are not the owner of the NFT"
+        );
+        require(
+            _nftListings[tokenId].length > 1,
+            "Can't remove the only listing for a token"
         );
 
         if (_nftListings[tokenId].length == 1) {
@@ -190,9 +215,13 @@ contract Millow is ERC721, Ownable {
         return totalMintedTokens;
     }
 
-    function tokenURI(
-        uint256 tokenId
-    ) public view virtual override returns (string memory) {
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        virtual
+        override
+        returns (string memory)
+    {
         require(
             _exists(tokenId),
             "ERC721Metadata: URI query for nonexistent token"
@@ -207,16 +236,62 @@ contract Millow is ERC721, Ownable {
     function withdrawCommission() public onlyOwner {
         uint256 commissionAmount = _commissionBalances[msg.sender];
         require(commissionAmount > 0, "No commission available for withdrawal");
+        require(
+            _commissionBalances[msg.sender] > 0,
+            "No commission available for withdrawal"
+        );
 
         _commissionBalances[msg.sender] = 0;
-        payable(msg.sender).transfer(commissionAmount);
+        // payable(msg.sender).transfer(commissionAmount);
+        //doing this with HBAR now
+        transferHbar(payable(msg.sender), commissionAmount);
 
         emit CommissionWithdrawn(msg.sender, commissionAmount);
     }
 
     function getCommissionBalance(address owner) public view returns (uint256) {
-        return _commissionBalances[owner];
+        // return _commissionBalances[owner];
+        uint256 commissionBalance = getBalance(owner);
+        return commissionBalance;
     }
 
+    //============================================
+    // GETTING HBAR TO THE CONTRACT
+    //============================================
     receive() external payable {}
+
+    fallback() external payable {}
+
+    function transferHbar(address payable _receiverAddress, uint256 _amount)
+        public
+    {
+        // Check that the recipient is not the contract itself.
+        require(_receiverAddress != address(this));
+
+        uint256 balance = getBalance(_receiverAddress);
+
+        // Check that the sender has enough HBAR to send.
+        require(balance >= _amount);
+        _receiverAddress.transfer(_amount);
+    }
+
+    function getBalance(address person) public view returns (uint256) {
+        return person.balance;
+    }
+
+    function receiveHbar(address payable sender, uint256 amount)
+        public
+        payable
+    {
+        // Check that the sender is not the contract itself.
+        require(sender != address(this));
+
+        uint256 balance = getBalance(sender);
+
+        // Add the HBAR to the contract's balance.
+        balance += amount;
+
+        // Notify the sender that the HBAR has been received.
+        sender.transfer(0);
+    }
 }
