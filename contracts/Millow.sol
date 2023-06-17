@@ -1,266 +1,222 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
-contract Millow is ERC1155, Ownable {
-    using Strings for uint256;
-
-    using SafeMath for uint256;
-
-    // Events
-    event PartitionMinted(uint256 partitionId, string uri, uint256 price);
-
-    event PartitionsBought(uint256[] partitionIds, address buyer);
-
-    event PartitionAuctionStarted(uint256 partitionId, uint256 startingPrice);
-
-    event PartitionBurned(uint256 partitionId, address owner);
-
-    // Storage
-    mapping(uint256 => mapping(uint256 => uint256)) private _tokenPartitions; // Mapping to track the partitions of each token
-    mapping(uint256 => string) private _partitionURIs; // Mapping to store the URI for each partition
-    mapping(uint256 => uint256) public _partitionPrices; // Mapping to store the price for each partition
-    mapping(uint256 => string) private _partitionMetadata; // Mapping to store metadata for each partition
-    mapping(uint256 => uint256) private _partitionsAvailableForSale; // Mapping to store metadata for each partition
-    mapping(uint256 => address) private _partitionOwners; // Mapping to store the owner of each partition
-
-    uint256 private _tokenIdCounter; // Counter to track the token ID
-
-    IERC20 public hbarToken;
-
-    constructor(address _hbarToken) ERC1155("") {
-        _tokenIdCounter = 0;
-        hbarToken = IERC20(_hbarToken);
+contract Millow is ERC721, Ownable {
+    struct NFTListing {
+        address owner;
+        uint256 price;
+        string fileUrl;
     }
 
-    function mintTokenWithParts(
-        uint256 numPartitions,
-        string memory uri,
-        uint256 _pricePerPart,
-        address minter
-    ) public {
-        require(numPartitions > 0, "Invalid number of partitions");
-        require(minter == msg.sender, "Only minters can call function");
+    struct NFTTransaction {
+        address buyer;
+        address seller;
+        uint256 commission;
+        // Add other relevant details here
+    }
+
+    mapping(uint256 => NFTListing[]) private _nftListings;
+    mapping(uint256 => NFTTransaction) private _nftTransactions;
+    mapping(uint256 => string) private _tokenURIs;
+
+    uint256 private _tokenIdCounter;
+    mapping(address => uint256) private _commissionBalances;
+
+    event NFTMinted(
+        uint256 indexed tokenId,
+        address indexed owner,
+        string fileUrl,
+        uint256 price
+    );
+    event NFTPriceSet(
+        uint256 indexed tokenId,
+        uint256 indexed index,
+        uint256 newPrice
+    );
+    event NFTListingRemoved(uint256 indexed tokenId, uint256 indexed index);
+    event CommissionWithdrawn(address indexed owner, uint256 amount);
+
+    constructor(string memory name, string memory symbol) ERC721(name, symbol) {
+        _tokenIdCounter = 0;
+    }
+
+    function setTokenURI(
+        uint256 tokenId,
+        string memory _tokenURI
+    ) internal virtual {
+        require(
+            _exists(tokenId),
+            "ERC721Metadata: URI set of nonexistent token"
+        );
+        _tokenURIs[tokenId] = _tokenURI;
+    }
+
+    function mintAndList(
+        string memory fileUrl,
+        uint256 price,
+        address seller
+    ) public payable returns (uint256) {
+        require(bytes(fileUrl).length > 0, "Invalid file URL");
+        require(price > 0, "Invalid price");
 
         uint256 tokenId = _tokenIdCounter;
+        _safeMint(seller, tokenId);
+
+        setTokenURI(tokenId, fileUrl);
+
+        _nftListings[tokenId].push(
+            NFTListing({owner: seller, price: price, fileUrl: fileUrl})
+        );
+
+        emit NFTMinted(tokenId, seller, fileUrl, price);
         _tokenIdCounter++;
-
-        for (uint256 i = 0; i < numPartitions; i++) {
-            uint256 partitionId = tokenId * numPartitions + i;
-
-            require(
-                _tokenPartitions[tokenId][partitionId] == 0,
-                "Partition ID already exists"
-            );
-
-            _tokenPartitions[tokenId][partitionId] = 1;
-
-            _mint(minter, partitionId, 1, "");
-
-            emit PartitionMinted(partitionId, uri, _pricePerPart);
-        }
-        _partitionURIs[tokenId] = uri; //all the partitions have the same url
-        _partitionPrices[tokenId] = _pricePerPart; //all the partitions have the same price
-        // pricePerPart[tokenId] = _pricePerPart;
-        _partitionsAvailableForSale[tokenId] = numPartitions;
+        return tokenId;
     }
 
-    // Function to buy partitions
-    function buyPart(
+    function getNFTListing(
+        uint256 tokenId
+    )
+        public
+        view
+        returns (address owner, uint256 price, string memory fileUrl)
+    {
+        require(_exists(tokenId), "Token does not exist");
+        require(_nftListings[tokenId].length > 0, "Invalid listing index");
+
+        NFTListing storage listing = _nftListings[tokenId][0];
+        return (listing.owner, listing.price, listing.fileUrl);
+    }
+
+    function buyNFT(
         uint256 tokenId,
         uint256 amount,
-        address _seller,
         address _buyer
     ) public payable {
-        // require(_tokenPartitions[tokenId][tokenId] == 1, "Invalid token ID");
-        require(amount > 0, "Invalid amount");
+        // Check if the token exists
+        require(_exists(tokenId), "Token does not exist");
 
-        uint256 partitionId = SafeMath.add(SafeMath.add(tokenId.mul(_tokenIdCounter), _tokenPartitions[tokenId][tokenId]), _tokenIdCounter).sub(amount);
+        // Check if there is at least one listing for the token
+        require(_nftListings[tokenId].length > 0, "Invalid listing index");
 
+        // Get the first listing for the token
+        NFTListing storage listing = _nftListings[tokenId][0];
 
-        uint256 availableSupply = _partitionsAvailableForSale[tokenId];
-        require(availableSupply >= amount, "Insufficient supply");
+        // Check if the NFT is listed for sale
+        require(listing.price > 0, "NFT is not listed for sale");
 
-        uint256 totalCost = amount * _partitionPrices[tokenId];
-        require(msg.value == totalCost, "Invalid payment amount");
+        // Check if the payment amount is sufficient
+        require(amount >= listing.price, "Insufficient payment");
 
-        uint256 commission = (getPartitionPrice(tokenId) * 5) / 100;
-        require(
-            hbarToken.transferFrom(
-                _buyer,
-                address(this),
-                getPartitionPrice(tokenId)
-            ),
-            "Payment transfer failed"
-        );
+        // Convert the listing owner address to payable
+        address payable seller = payable(listing.owner);
 
-        uint256 remainingPayment = getPartitionPrice(tokenId) - commission;
+        // Calculate the commission to be deducted from the payment
+        uint256 commission = (listing.price * 5) / 100;
 
-        require(
-            hbarToken.transfer(_seller, remainingPayment),
-            "Paying seller failed"
-        );
+        // Calculate the remaining payment after deducting the commission
+        uint256 remainingPayment = listing.price - commission;
 
-        // _tokenPartitions[tokenId][partitionId] -= amount;
+        // Transfer the remaining payment to the seller
+        seller.transfer(remainingPayment);
 
-        uint256[] memory partitionIds = new uint256[](amount);
-        uint256[] memory amounts = new uint256[](amount);
+        // Add the commission to the commission balances
+        _commissionBalances[owner()] += commission;
 
-        for (uint256 i = 0; i < amount; i++) {
-            partitionIds[i] = partitionId + i;
-            amounts[i] = 1;
+        // Transfer the NFT ownership from the seller to the buyer
+        _transfer(seller, _buyer, tokenId);
+
+        // Store the transaction details
+        _nftTransactions[tokenId] = NFTTransaction(_buyer, seller, commission);
+
+        // Remove the listing from the nftListings array
+        if (_nftListings[tokenId].length == 1) {
+            delete _nftListings[tokenId];
+        } else {
+            _nftListings[tokenId][0] = _nftListings[tokenId][
+                _nftListings[tokenId].length - 1
+            ];
+            _nftListings[tokenId].pop();
         }
-
-        _mintBatch(_buyer, partitionIds, amounts, "");
-        uint256 remainingPartitions = _partitionsAvailableForSale[tokenId] -
-            amount;
-        _partitionsAvailableForSale[tokenId] = remainingPartitions;
-        _partitionOwners[partitionId] = _buyer;
-
-        emit PartitionsBought(partitionIds, _buyer);
     }
 
-    // Function to get the URI of a partition
-    function getPartitionURI(
-        uint256 tokenId
-    ) public view returns (string memory) {
-        return _partitionURIs[tokenId]; //since all partitions have the same url
-    }
-
-    // Function to get the remaining partitions of a token
-    function getRemainingPartitions(
-        uint256 tokenId
-    ) public view returns (uint256) {
-        uint256 totalPartitions = _tokenIdCounter * 1; // Total partitions for all tokens
-        uint256 remainingPartitions = 0;
-
-        for (
-            uint256 partitionId = tokenId * 1;
-            partitionId < totalPartitions;
-            partitionId++
-        ) {
-            remainingPartitions += _tokenPartitions[tokenId][partitionId];
-        }
-
-        return remainingPartitions;
-    }
-
-    //returns an array of the partitions a token has
-    function getTokenPartitions(
-        uint256 tokenId
-    ) public view returns (uint256[] memory) {
-        uint256[] memory partitions;
-        uint256 count = 0;
-
-        for (
-            uint256 partitionId = tokenId * _tokenIdCounter;
-            partitionId < (tokenId + 1) * _tokenIdCounter;
-            partitionId++
-        ) {
-            if (_tokenPartitions[tokenId][partitionId] == 1) {
-                count++;
-            }
-        }
-
-        partitions = new uint256[](count);
-        count = 0;
-
-        for (
-            uint256 partitionId = tokenId * _tokenIdCounter;
-            partitionId < (tokenId + 1) * _tokenIdCounter;
-            partitionId++
-        ) {
-            if (_tokenPartitions[tokenId][partitionId] == 1) {
-                partitions[count] = partitionId;
-                count++;
-            }
-        }
-
-        return partitions;
-    }
-
-    //returns the number of unbought partitions in a token
-    function getUnboughtPartitionCount(
-        uint256 tokenId
-    ) public view returns (uint256) {
-        // uint256 unboughtPartitions = 0;
-
-        // for (
-        //     uint256 partitionId = tokenId * 1;
-        //     partitionId < (tokenId + 1) * 1;
-        //     partitionId++
-        // ) {
-        //     if (_tokenPartitions[tokenId][partitionId] == 1) {
-        //         unboughtPartitions++;
-        //     }
-        // }
-        // _tokenPartitionCount[tokenId]
-
-        // return unboughtPartitions;
-        return _partitionsAvailableForSale[tokenId];
-    }
-
-    // Function to get the price of a partition
-    function getPartitionPrice(uint256 tokenId) public view returns (uint256) {
-        return _partitionPrices[tokenId];
-    }
-
-    // Function to get the owner of a partition
-    function getPartitionOwner(
-        uint256 partitionId
-    ) public view returns (address) {
-        return _partitionOwners[partitionId];
-    }
-
-    // Function to start an auction for a partition
-    function auctionPart(
-        uint256 partitionId,
-        uint256 startingPrice,
-        address autioneer
+    function resetNFTPrice(
+        uint256 tokenId,
+        uint256 index,
+        uint256 newPrice
     ) public {
+        require(_exists(tokenId), "Token does not exist");
+        require(_nftListings[tokenId].length > index, "Invalid listing index");
         require(
-            _tokenPartitions[partitionId / 100][partitionId] == 1,
-            "Invalid partition ID"
+            _nftListings[tokenId][index].owner == msg.sender,
+            "You are not the owner of the NFT"
         );
+        require(newPrice > 0, "Invalid price");
 
-        require(
-            autioneer == msg.sender,
-            "Only the owner can start the auction"
-        );
-
-        // Additional auction logic can be implemented here
-        // For simplicity, we emit an event with the details
-        emit PartitionAuctionStarted(partitionId, startingPrice);
+        _nftListings[tokenId][index].price = newPrice;
+        emit NFTPriceSet(tokenId, index, newPrice);
     }
 
-    // Function to burn partitions
-    function burnPartitions(uint256 amountToBurn, uint256 tokenId) public {
-        uint256 partitionId = tokenId * 1; // Assuming each token has only one partition
+    function removeNFTListing(uint256 tokenId) public {
+        require(_exists(tokenId), "Token does not exist");
+        require(_nftListings[tokenId].length > 0, "Invalid listing index");
         require(
-            _tokenPartitions[tokenId][partitionId] == 1,
-            "Invalid partition ID"
+            _nftListings[tokenId][0].owner == msg.sender,
+            "You are not the owner of the NFT"
         );
 
-        require(amountToBurn > 0, "Invalid amount to burn");
+        if (_nftListings[tokenId].length == 1) {
+            delete _nftListings[tokenId];
+        } else {
+            for (uint256 i = 0; i < _nftListings[tokenId].length - 1; i++) {
+                _nftListings[tokenId][i] = _nftListings[tokenId][i + 1];
+            }
+            _nftListings[tokenId].pop();
+        }
 
-        uint256 remainingSupply = _partitionsAvailableForSale[tokenId];
+        emit NFTListingRemoved(tokenId, 0);
+    }
+
+    function getTotalNumberOfMintedTokens() public view returns (uint256) {
+        uint256 totalMintedTokens = 0;
+        for (uint256 tokenId = 0; tokenId <= _tokenIdCounter; tokenId++) {
+            if (_nftListings[tokenId].length > 0) {
+                totalMintedTokens++;
+            }
+        }
+        return totalMintedTokens;
+    }
+
+    function tokenURI(
+        uint256 tokenId
+    ) public view virtual override returns (string memory) {
         require(
-            amountToBurn <= remainingSupply,
-            "Insufficient partitions to burn"
+            _exists(tokenId),
+            "ERC721Metadata: URI query for nonexistent token"
         );
-
-        _partitionsAvailableForSale[tokenId] -= amountToBurn;
-        _burn(msg.sender, partitionId, amountToBurn);
-
-        emit PartitionBurned(partitionId, msg.sender);
+        return _tokenURIs[tokenId];
     }
 
-    function getTokenCount() public view onlyOwner returns (uint256) {
-        return _tokenIdCounter + 1;
+    function getLastUpdatedTokenId() public view returns (uint256) {
+        return _tokenIdCounter;
     }
+
+    function withdrawCommission() public onlyOwner {
+        uint256 commissionAmount = _commissionBalances[msg.sender];
+        require(commissionAmount > 0, "No commission available for withdrawal");
+
+        _commissionBalances[msg.sender] = 0;
+        payable(msg.sender).transfer(commissionAmount);
+
+        emit CommissionWithdrawn(msg.sender, commissionAmount);
+    }
+
+    function getCommissionBalance(address owner) public view returns (uint256) {
+        return _commissionBalances[owner];
+    }
+
+    receive() external payable {}
 }

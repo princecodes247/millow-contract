@@ -18,6 +18,7 @@
   "homepage": "https://github.com/The-Titanshe/dev_dolapo#readme",
   "description": "",
   "dependencies": {
+    "@hashgraph/sdk": "^2.26.0",
     "dotenv": "^16.0.3"
   },
   "devDependencies": {
