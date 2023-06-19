@@ -1,5 +1,5 @@
 import { ethers } from "hardhat";
-import { Signer, utils, Contract } from "ethers";
+import { Signer, Contract } from "ethers";
 import { expect } from "chai";
 import parseHBAR from '../utils/parseHBAR';
 
@@ -8,13 +8,27 @@ describe("Millow", function () {
     let owner: any;
     let buyer: any;
     let seller: any;
+    let ownerAddress: string;
+    let buyerAddress: string;
+    let sellerAddress: string;
+    let hbarToken: any
 
     beforeEach(async function () {
         [owner, buyer, seller] = await ethers.getSigners();
+        ownerAddress = await owner.getAddress();
+        buyerAddress = await buyer.getAddress();
+        sellerAddress = await seller.getAddress();
 
+        const HbarToken = await ethers.getContractFactory("HbarToken");
+        hbarToken = await HbarToken.deploy("HbarToken", "HTN", 6, parseHBAR("100000"));
+        await hbarToken.deployed();
+        
         const Millow = await ethers.getContractFactory("Millow");
-        millowContract = await Millow.deploy("Millow", "MIL");
+        millowContract = await Millow.deploy("Millow", "MIL", hbarToken.address);
         await millowContract.deployed();
+
+        await hbarToken.mint(buyer.address, parseHBAR("100000000000000000"))
+        
     });
 
     describe("mintAndList", function () {
@@ -22,29 +36,29 @@ describe("Millow", function () {
             const currentTokenId = await millowContract.getLastUpdatedTokenId();
             const _tokenId = await millowContract.mintAndList(
                 `../metadata/data.json[${currentTokenId.toString()}]`,
-                ethers.utils.parseEther("100"),
-                seller.address
+                parseHBAR("0.1"),
+                sellerAddress
             );
             const tokenId = Number(_tokenId.value)
-
-            expect(await millowContract.ownerOf(tokenId)).to.equal(seller.address);
+            
+            expect(await millowContract.ownerOf(tokenId)).to.equal(sellerAddress);
 
             const [ownerAddress, price, fileUrl] = await millowContract.getNFTListing(tokenId);
-            expect(ownerAddress).to.equal(seller.address);
-            expect(price).to.equal(ethers.utils.parseEther("100"));
-            expect(fileUrl).to.equal("../metadata/data.json[0]");
+            expect(ownerAddress).to.equal(sellerAddress);
+            expect(price).to.equal(parseHBAR("0.1"));
+            expect(fileUrl).to.equal(`../metadata/data.json[${currentTokenId.toString()}]`);
         });
     });
 
     describe("buyNFT", function () {
-        let tokenId: string | number;
+        let tokenId: number;
 
         beforeEach(async function () {
             const currentTokenId = await millowContract.getLastUpdatedTokenId();
             const _tokenId = await millowContract.mintAndList(
                 `../metadata/data.json[${currentTokenId.toString()}]`,
-                ethers.utils.parseEther("100"),
-                seller.address
+                parseHBAR("0.1"),
+                sellerAddress
             );
             tokenId = Number(_tokenId.value)
         });
@@ -52,153 +66,150 @@ describe("Millow", function () {
         it("should buy an NFT and transfer ownership", async function () {
             const sellerInitialBalance = await seller.getBalance();
             const buyerInitialBalance = await buyer.getBalance();
-      
-            const txn = await millowContract.connect(buyer).buyNFT(0, ethers.utils.parseEther("100"), buyer.address);
-            console.log(txn)
 
-            // const buyerLaterBalance = await buyer.getBalance();
-            // const sellerLaterBalance = await seller.getBalance();
-            // const newOwner = await millowContract.ownerOf(tokenId);
+            await hbarToken.connect(buyer).approve(buyer.address, parseHBAR("0.1"))
+            await millowContract.connect(buyer).buyNFT(tokenId, parseHBAR("0.1"), buyer.address);
 
-            // expect(newOwner).to.equal(buyer.address);
-            // expect(buyerLaterBalance).to.equal(buyerInitialBalance.sub(ethers.utils.parseEther("100")));
-            // expect(sellerLaterBalance).to.equal(sellerInitialBalance.add(ethers.utils.parseEther("90")));
+            const buyerLaterBalance = await buyer.getBalance();
+            const sellerLaterBalance = await seller.getBalance();
+            const newOwner = await millowContract.ownerOf(tokenId);
+
+            expect(newOwner).to.equal(buyerAddress);
+            expect(buyerLaterBalance).to.equal(buyerInitialBalance.sub(parseHBAR("0.1")));
+            expect(sellerLaterBalance).to.equal(sellerInitialBalance.add(parseHBAR("0.095")));
         });
     });
 
-    // describe("resetNFTPrice", function () {
-    //     let tokenId: string | number;
+    describe("resetNFTPrice", function () {
+        let tokenId: number;
 
-    //     beforeEach(async function () {
-    //         const currentTokenId = await millowContract.getLastUpdatedTokenId();
-    //         const _tokenId = await millowContract.mintAndList(
-    //             `../metadata/data.json[${currentTokenId.toString()}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         tokenId = Number(_tokenId.value)
-    //     });
+        beforeEach(async function () {
+            const currentTokenId = await millowContract.getLastUpdatedTokenId();
+            const _tokenId = await millowContract.mintAndList(
+                `../metadata/data.json[${currentTokenId.toString()}]`,
+                parseHBAR("0.1"),
+                sellerAddress
+            );
+            tokenId = Number(_tokenId.value)
+        });
 
-    //     it("should reset the price of an NFT", async function () {
-    //         await millowContract.connect(seller).resetNFTPrice(tokenId, 0, ethers.utils.parseEther("200"));
+        it("should reset the price of an NFT", async function () {
+            await millowContract.connect(seller).resetNFTPrice(tokenId, 0, parseHBAR("0.2"));
 
-    //         const [, newPrice] = await millowContract.getNFTListing(tokenId);
+            const [, newPrice] = await millowContract.getNFTListing(tokenId);
 
-    //         expect(newPrice).to.equal(ethers.utils.parseEther("200"));
-    //     });
-    // });
+            expect(newPrice).to.equal(parseHBAR("0.2"));
+        });
+    });
 
-    // describe("getTotalNumberOfListedTokens", function () {
-    //     beforeEach(async function () {
-    //         await millowContract.mintAndList(
-    //             `../metadata/data.json[${await millowContract.getTotalNumberOfMintedTokens() - 1}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         await millowContract.mintAndList(
-    //             `../metadata/data.json[${await millowContract.getTotalNumberOfMintedTokens() - 1}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //     });
+    describe("getTotalNumberOfListedTokens", function () {
+        beforeEach(async function () {
+            await millowContract.mintAndList(
+                `../metadata/data.json[${await millowContract.getTotalNumberOfMintedTokens() - 1}]`,
+                ethers.utils.parseEther("100"),
+                sellerAddress
+            );
+            await millowContract.mintAndList(
+                `../metadata/data.json[${await millowContract.getTotalNumberOfMintedTokens() - 1}]`,
+                ethers.utils.parseEther("100"),
+                sellerAddress
+            );
+        });
 
-    //     it("should return the total number of listed tokens", async function () {
-    //         const totalListedTokens = await millowContract.getTotalNumberOfMintedTokens();
-    //         expect(totalListedTokens).to.equal(2);
-    //     });
-    // });
+        it("should return the total number of listed tokens", async function () {
+            const totalListedTokens = await millowContract.getTotalNumberOfMintedTokens();
+            expect(totalListedTokens).to.equal(2);
+        });
+    });
 
-    // describe("getTokenURI", function () {
-    //     let tokenId: string | number;
+    describe("getTokenURI", function () {
+        let tokenId: number;
 
-    //     beforeEach(async function () {
-    //         const currentTokenId = await millowContract.getLastUpdatedTokenId();
-    //         const _tokenId = await millowContract.mintAndList(
-    //             `../metadata/data.json[${currentTokenId.toString()}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         tokenId = Number(_tokenId.value)
-    //     });
+        beforeEach(async function () {
+            const currentTokenId = await millowContract.getLastUpdatedTokenId();
+            const _tokenId = await millowContract.mintAndList(
+                `../metadata/data.json[${currentTokenId.toString()}]`,
+                ethers.utils.parseEther("100"),
+                sellerAddress
+            );
+            tokenId = Number(_tokenId.value)
+        });
 
-    //     it("should return the token URI", async function () {
-    //         const tokenURI = await millowContract.tokenURI(tokenId);
+        it("should return the token URI", async function () {
+            const tokenURI = await millowContract.tokenURI(tokenId);
 
-    //         expect(tokenURI).to.equal("../metadata/data.json[0]");
-    //     });
-    // });
+            expect(tokenURI).to.equal(`../metadata/data.json[${tokenId.toString()}]`);
+        });
+    });
 
-    // describe("withdrawCommission", function () {
-    //     it("should allow the contract owner to withdraw accumulated commission", async function () {
-    //         // Mint and list a new NFT
-    //         const currentTokenId = await millowContract.getLastUpdatedTokenId();
-    //         const _tokenId = await millowContract.mintAndList(
-    //             `../metadata/data.json[${currentTokenId.toString()}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         const tokenId = Number(_tokenId.value)
+    describe("withdrawCommission", function () {
+        it("should allow the contract owner to withdraw accumulated commission", async function () {
+            // Mint and list a new NFT
+            const currentTokenId = await millowContract.getLastUpdatedTokenId();
+            const _tokenId = await millowContract.mintAndList(
+                `../metadata/data.json[${currentTokenId.toString()}]`,
+                parseHBAR("0.1"),
+                sellerAddress
+            );
+            const tokenId = Number(_tokenId.value)
 
-    //         // Buyer purchases the NFT
-    //         await millowContract.connect(buyer).buyNFT(tokenId, ethers.utils.parseEther("100"), buyer.address);
+            await hbarToken.connect(buyer).approve(buyer.address, parseHBAR("0.1") )
+            await millowContract.connect(buyer).buyNFT(tokenId, parseHBAR("0.1"), buyer.address);
 
+            // Withdraw the accumulated commission by the contract owner
+            await millowContract.connect(owner).withdrawCommission();
 
-    //         // Withdraw the accumulated commission by the contract owner
-    //         const ownerInitialBalance = await owner.getBalance();
-    //         await millowContract.connect(owner).withdrawCommission();
+            const ownerLaterBalance = await owner.getBalance();
+            const commissionBalance = await millowContract.getCommissionBalance();
 
-    //         const ownerLaterBalance = await owner.getBalance();
-    //         const commissionBalance = await millowContract.getCommissionBalance(owner.address);
+            expect(commissionBalance).to.equal(0);
+            expect(ownerLaterBalance).to.equal(parseHBAR("0.005"));
+        });
 
-    //         expect(commissionBalance).to.equal(0);
-    //         expect(ownerLaterBalance).to.gt(ownerInitialBalance);
-    //     });
+        it("should not allow non-owners to withdraw accumulated commission", async function () {
+            // Mint and list a new NFT
+            const currentTokenId = await millowContract.getLastUpdatedTokenId();
+            const _tokenId = await millowContract.mintAndList(
+                `../metadata/data.json[${currentTokenId.toString()}]`,
+                parseHBAR("0.1"),
+                sellerAddress
+            );
+            const tokenId = Number(_tokenId.value)
 
-    //     it("should not allow non-owners to withdraw accumulated commission", async function () {
-    //         // Mint and list a new NFT
-    //         const _tokenId = await millowContract.mintAndList(
-    //             `../metadata/data.json[0]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         const tokenId = Number(_tokenId.value)
+            // await hbarToken.connect(buyer).approve(buyer.address, parseHBAR("0.1") )
+            await millowContract.connect(buyer).buyNFT(tokenId, parseHBAR("0.1"), buyer.address);
 
-    //         // Buyer purchases the NFT
-    //         await millowContract.connect(buyer).buyNFT(tokenId, ethers.utils.parseEther("100"), buyer.address);
-    //         ;
+            // Attempt to withdraw the accumulated commission by a non-owner account
+            await expect(millowContract.connect(buyer).withdrawCommission()).to.be.revertedWith(
+                "Ownable: caller is not the owner"
+            );
+        });
+    });
 
-    //         // Attempt to withdraw the accumulated commission by a non-owner account
-    //         await expect(millowContract.connect(buyer).withdrawCommission()).to.be.revertedWith(
-    //             "Ownable: caller is not the owner"
-    //         );
-    //     });
-    // });
+    describe("getCommissionBalance", function () {
+        it("should return the commission balance for the contract owner", async function () {
+            // Mint and list a new NFT
+            const currentTokenId = await millowContract.getLastUpdatedTokenId();
+            const _tokenId = await millowContract.mintAndList(
+                `../metadata/data.json[${currentTokenId.toString()}]`,
+                parseHBAR("0.1"),
+                sellerAddress
+            );
+            const tokenId = Number(_tokenId.value)
 
-    // describe("getCommissionBalance", function () {
-    //     it("should return the commission balance for the contract owner", async function () {
-    //         // Mint and list a new NFT
-    //         const currentTokenId = await millowContract.getLastUpdatedTokenId();
-    //         const _tokenId = await millowContract.mintAndList(
-    //             `../metadata/data.json[${currentTokenId.toString()}]`,
-    //             ethers.utils.parseEther("100"),
-    //             seller.address
-    //         );
-    //         const tokenId = Number(_tokenId.value)
+            await hbarToken.connect(buyer).approve(buyer.address, parseHBAR("0.1") )
+            await millowContract.connect(buyer).buyNFT(tokenId, parseHBAR("0.1"), buyer.address);
 
-    //         // Buyer purchases the NFT
-    //         await millowContract.connect(buyer).buyNFT(tokenId, ethers.utils.parseEther("100"), buyer.address);
-            
+            // Check the commission balance for the contract owner
+            const commissionBalance = await millowContract.connect(owner).getCommissionBalance();
 
-    //         // Check the commission balance for the contract owner
-    //         const commissionBalance = await millowContract.getCommissionBalance(owner.address);
+            expect(commissionBalance).to.equal(parseHBAR("0.005")); // Assuming 10% commission rate
+        });
 
-    //         expect(commissionBalance).to.equal(ethers.utils.parseEther("10")); // Assuming 10% commission rate
-    //     });
+        it("should return zero commission balance for a non-owner account", async function () {
+            const commissionBalance = await millowContract.getCommissionBalance();
 
-    //     it("should return zero commission balance for a non-owner account", async function () {
-    //         const commissionBalance = await millowContract.getCommissionBalance(buyer.address);
-
-    //         expect(commissionBalance).to.equal(0);
-    //     });
-    // });
+            expect(commissionBalance).to.equal(0);
+        });
+    });
 });

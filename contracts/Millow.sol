@@ -1,16 +1,24 @@
-// SPDX-License-Identifier: GPL-3.0
-// pragma solidity ^0.8.0;
-pragma solidity >=0.7.0 <0.9.0;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
-// Compile with remix for remote imports to work - otherwise keep precompiles locally
-// import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/hts-precompile/HederaTokenService.sol";
-import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/contracts/hts-precompile/HederaTokenService.sol";
-// import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/hts-precompile/HederaResponseCodes.sol";
-import "https://github.com/hashgraph/hedera-smart-contracts/blob/main/contracts/hts-precompile/HederaResponseCodes.sol";
+// import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+
+interface IHbarToken {
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+
+    function getBalance(address account) external view returns (uint256);
+}
 
 contract Millow is ERC721, Ownable {
     struct NFTListing {
@@ -33,6 +41,8 @@ contract Millow is ERC721, Ownable {
     uint256 private _tokenIdCounter;
     mapping(address => uint256) private _commissionBalances;
 
+    IHbarToken private hbarToken;
+
     event NFTMinted(
         uint256 indexed tokenId,
         address indexed owner,
@@ -47,14 +57,16 @@ contract Millow is ERC721, Ownable {
     event NFTListingRemoved(uint256 indexed tokenId, uint256 indexed index);
     event CommissionWithdrawn(address indexed owner, uint256 amount);
 
-    constructor(string memory name, string memory symbol) ERC721(name, symbol) {
+    constructor(
+        string memory name,
+        string memory symbol,
+        address _hbarTokenAddress
+    ) ERC721(name, symbol) {
         _tokenIdCounter = 0;
+        hbarToken = IHbarToken(_hbarTokenAddress);
     }
 
-    function setTokenURI(uint256 tokenId, string memory _tokenURI)
-        internal
-        virtual
-    {
+    function setTokenURI(uint256 tokenId, string memory _tokenURI) internal {
         require(
             _exists(tokenId),
             "ERC721Metadata: URI set of nonexistent token"
@@ -84,14 +96,12 @@ contract Millow is ERC721, Ownable {
         return tokenId;
     }
 
-    function getNFTListing(uint256 tokenId)
+    function getNFTListing(
+        uint256 tokenId
+    )
         public
         view
-        returns (
-            address owner,
-            uint256 price,
-            string memory fileUrl
-        )
+        returns (address owner, uint256 price, string memory fileUrl)
     {
         require(_exists(tokenId), "Token does not exist");
         require(_nftListings[tokenId].length > 0, "Invalid listing index");
@@ -130,14 +140,10 @@ contract Millow is ERC721, Ownable {
         // Calculate the remaining payment after deducting the commission
         uint256 remainingPayment = listing.price - commission;
 
-        //takes HBAR from buyer
-        receiveHbar(payable(_buyer), amount);
-
-        // Transfer the remaining payment to the seller
-        // seller.transfer(remainingPayment);
+        __transferFrom(_buyer, address(this), amount);
 
         //using HBAR now - transferring remaining payment to the seller
-        transferHbar(seller, remainingPayment);
+        __transfer(seller, remainingPayment);
 
         // Add the commission to the commission balances
         _commissionBalances[owner()] += commission;
@@ -215,13 +221,9 @@ contract Millow is ERC721, Ownable {
         return totalMintedTokens;
     }
 
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        virtual
-        override
-        returns (string memory)
-    {
+    function tokenURI(
+        uint256 tokenId
+    ) public view virtual override returns (string memory) {
         require(
             _exists(tokenId),
             "ERC721Metadata: URI query for nonexistent token"
@@ -242,16 +244,14 @@ contract Millow is ERC721, Ownable {
         );
 
         _commissionBalances[msg.sender] = 0;
-        // payable(msg.sender).transfer(commissionAmount);
-        //doing this with HBAR now
-        transferHbar(payable(msg.sender), commissionAmount);
+        __transfer(msg.sender, commissionAmount);
 
         emit CommissionWithdrawn(msg.sender, commissionAmount);
     }
 
-    function getCommissionBalance(address owner) public view returns (uint256) {
+    function getCommissionBalance() public view onlyOwner returns (uint256) {
         // return _commissionBalances[owner];
-        uint256 commissionBalance = getBalance(owner);
+        uint256 commissionBalance = _commissionBalances[owner()];
         return commissionBalance;
     }
 
@@ -262,36 +262,44 @@ contract Millow is ERC721, Ownable {
 
     fallback() external payable {}
 
-    function transferHbar(address payable _receiverAddress, uint256 _amount)
-        public
-    {
-        // Check that the recipient is not the contract itself.
-        require(_receiverAddress != address(this));
+    function __transfer(address to, uint256 value) internal returns (bool) {
+        require(to != address(0), "Invalid address");
+        // require(
+        //     value <= hbarToken.getBalance(msg.sender),
+        //     "Insufficient balance __transfer"
+        // );
 
-        uint256 balance = getBalance(_receiverAddress);
+        hbarToken.transfer(to, value);
 
-        // Check that the sender has enough HBAR to send.
-        require(balance >= _amount);
-        _receiverAddress.transfer(_amount);
+        // hbarToken.getBalance(msg.sender) -= value;
+        // hbarToken.getBalance(to) += value;
+        emit Transfer(msg.sender, to, value);
+
+        return true;
     }
 
-    function getBalance(address person) public view returns (uint256) {
-        return person.balance;
+    function __transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) internal returns (bool) {
+        require(from != address(0), "Invalid address");
+        require(to != address(0), "Invalid address");
+        require(value <= __getBalance(from), "Insufficient balance __transferFrom");
+        // require(value <= allowance[from][msg.sender], "Insufficient allowance");
+
+        // hbarToken.approve(from, value);
+        hbarToken.transferFrom(from, to, value);
+
+        // __getBalance(from) -= value;
+        // __getBalance[to] += value;
+        // allowance[from][msg.sender] -= value;
+        emit Transfer(from, to, value);
+
+        return true;
     }
 
-    function receiveHbar(address payable sender, uint256 amount)
-        public
-        payable
-    {
-        // Check that the sender is not the contract itself.
-        require(sender != address(this));
-
-        uint256 balance = getBalance(sender);
-
-        // Add the HBAR to the contract's balance.
-        balance += amount;
-
-        // Notify the sender that the HBAR has been received.
-        sender.transfer(0);
+    function __getBalance(address account) public view returns (uint256) {
+        return hbarToken.getBalance(account);
     }
 }
